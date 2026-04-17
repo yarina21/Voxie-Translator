@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 from deep_translator import GoogleTranslator
 from pydub import AudioSegment
 
-# 1. Configurarea căilor și încărcarea variabilelor de mediu
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 env_path = os.path.join(base_dir, ".env")
 load_dotenv(dotenv_path=env_path)
@@ -12,7 +11,7 @@ load_dotenv(dotenv_path=env_path)
 AZURE_KEY = os.getenv("AZURE_SPEECH_KEY")
 AZURE_REGION = os.getenv("AZURE_SPEECH_REGION")
 
-# Debugging pentru a confirma încărcarea cheilor din .env
+
 if not AZURE_KEY:
     print("!!! EROARE: Nu s-a putut incarca AZURE_SPEECH_KEY !!!")
 else:
@@ -21,7 +20,7 @@ else:
 def transcribe_audio(audio_path: str):
     wav_path = audio_path + "_fix.wav"
     try:
-        # Conversie forțată: Azure vrea WAV, 16000Hz, Mono, 16-bit PCM
+       
         print(f"--- Incepe conversia pentru: {audio_path} ---")
         audio = AudioSegment.from_file(audio_path)
         audio.export(wav_path, format="wav", parameters=["-ac", "1", "-ar", "16000"])
