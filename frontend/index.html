@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ro">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Voxie AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js"></script>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+          'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+          sans-serif;
+        background: linear-gradient(135deg, #f8d7e8 0%, #fbe4ec 50%, #f8d7e8 100%);
+      }
+      
+      #lottie-container {
+        width: 400px;
+        height: 400px;
+        margin: 0 auto;
+      }
+      
+      .speech-bubble {
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(230, 230, 230, 0.9) 100%);
+        border-radius: 32px;
+        padding: 32px 40px;
+        position: relative;
+        max-width: 500px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.8);
+        margin-bottom: -20px;
+        z-index: 10;
+      }
+      
+      .speech-bubble::after {
+        content: '';
+        position: absolute;
+        bottom: -16px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 28px;
+        height: 28px;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(230, 230, 230, 0.9) 100%);
+        border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, 0.8);
+      }
+      
+      .voxie-title {
+        font-size: 32px;
+        font-weight: 700;
+        letter-spacing: 2px;
+        color: #5a7a8f;
+      }
+      
+      .speech-text {
+        color: #2c2c2c;
+        font-size: 18px;
+        line-height: 1.6;
+        font-weight: 400;
+      }
+      
+      .cta-text {
+        color: #5a7a8f;
+        font-size: 20px;
+        font-weight: 400;
+        letter-spacing: 0.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      let hasStarted = false;
+
+      function renderLandingPage() {
+        document.getElementById('root').innerHTML = `
+          <div class="w-full min-h-screen flex flex-col justify-between py-12 px-8">
+            <!-- Top-left Title -->
+            <div class="flex justify-start">
+              <h1 class="voxie-title">VOXIE AI</h1>
+            </div>
+            
+            <!-- Center Content -->
+            <div class="flex-1 flex flex-col items-center justify-center gap-8">
+              <!-- Speech Bubble -->
+              <div class="speech-bubble">
+                <p class="speech-text">Bună! Sunt Voxie, asistentul tău de traducere vocală. Vorbește natural, iar eu voi traduce în timp real pentru tine. 🌸</p>
+              </div>
+              
+              <!-- Lottie Animation -->
+              <div id="lottie-container"></div>
+            </div>
+            
+            <!-- Bottom CTA -->
+            <div class="flex justify-center pb-8">
+              <p class="cta-text">Pentru a începe, apasă o tasta</p>
+            </div>
+          </div>
+        `;
+        
+        // Load Lottie animation
+        fetch('src/assets/robot.json')
+          .then(response => response.json())
+          .then(data => {
+            lottie.loadAnimation({
+              container: document.getElementById('lottie-container'),
+              renderer: 'svg',
+              loop: true,
+              autoplay: true,
+              animationData: data
+            });
+          })
+          .catch(error => console.error('Error loading Lottie animation:', error));
+      }
+
+      function renderMainInterface() {
+        document.getElementById('root').innerHTML = `
+          <div class="w-full h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+            <div class="bg-white rounded-lg shadow-lg p-8 max-w-2xl">
+              <h1 class="text-3xl font-bold text-gray-800 mb-4">Voxie AI - Main Interface</h1>
+              <p class="text-gray-600 mb-6">Welcome to the main interface. Your AI assistant is ready to help!</p>
+              <button onclick="goBack()" class="px-6 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400 transition">
+                Back
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
+      function startApp() {
+        hasStarted = true;
+        renderMainInterface();
+      }
+
+      function goBack() {
+        hasStarted = false;
+        renderLandingPage();
+      }
+      
+      // Add keyboard event listener
+      document.addEventListener('keydown', function() {
+        if (!hasStarted) {
+          startApp();
+        }
+      });
+
+      // Initial render
+      renderLandingPage();
+    </script>
+  </body>
+</html>
