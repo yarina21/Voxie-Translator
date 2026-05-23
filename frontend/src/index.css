@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+}
+
+.speech-bubble {
+  @apply rounded-[32px] px-10 py-8 relative max-w-[500px] -mb-5 z-10;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(230, 230, 230, 0.9) 100%);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.speech-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(230, 230, 230, 0.9) 100%);
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.voxie-title {
+  @apply text-4xl font-bold tracking-wider;
+  color: #5a7a8f;
+}
+
+.speech-text {
+  @apply text-lg leading-relaxed font-normal;
+  color: #2c2c2c;
+}
+
+.cta-text {
+  @apply text-xl font-normal tracking-wide;
+  color: #5a7a8f;
+}
+
+/* Robot Animation */
+.robot-animation {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+.robot-eye {
+  animation: blink 3s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 10%, 100% {
+    r: 8;
+  }
+  5% {
+    r: 2;
+  }
+}
+
+.robot-arm-left {
+  animation: wave-left 2s ease-in-out infinite;
+  transform-origin: 50px 152px;
+}
+
+.robot-arm-right {
+  animation: wave-right 2s ease-in-out infinite;
+  transform-origin: 150px 152px;
+}
+
+@keyframes wave-left {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-30deg);
+  }
+}
+
+@keyframes wave-right {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(30deg);
+  }
+}
