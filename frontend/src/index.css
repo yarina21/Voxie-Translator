@@ -12,15 +12,32 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
+  background: linear-gradient(135deg, #f8d7e8 0%, #fbe4ec 50%, #f8d7e8 100%);
+  min-height: 100vh;
 }
 
+/* Titlu ajustat: puțin mai mare (48px) și mai gros (800) */
+.voxie-title {
+  font-size: 48px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #5a7a8f;
+}
+
+/* Bula de text EXACT cum o aveai tu inițial (fără clase Tailwind care se strică) */
 .speech-bubble {
-  @apply rounded-[32px] px-10 py-8 relative max-w-[500px] -mb-5 z-10;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(230, 230, 230, 0.9) 100%);
+  border-radius: 32px;
+  padding: 32px 40px;
+  position: relative;
+  max-width: 550px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.8);
+  margin-bottom: -20px;
+  z-index: 10;
 }
 
+/* „Codița” rotundă de sub bulă care indică spre robot */
 .speech-bubble::after {
   content: '';
   position: absolute;
@@ -34,72 +51,26 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.8);
 }
 
-.voxie-title {
-  @apply text-4xl font-bold tracking-wider;
-  color: #5a7a8f;
-}
-
+/* Textul din bulă */
 .speech-text {
-  @apply text-lg leading-relaxed font-normal;
+  font-size: 18px;
+  line-height: 1.6;
+  font-weight: 400;
   color: #2c2c2c;
+  text-align: center;
 }
 
+/* Textul de jos („Apasă o tastă”) */
 .cta-text {
-  @apply text-xl font-normal tracking-wide;
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
   color: #5a7a8f;
 }
 
-/* Robot Animation */
-.robot-animation {
-  animation: float 3s ease-in-out infinite;
-}
-
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-20px);
-  }
-}
-
-.robot-eye {
-  animation: blink 3s ease-in-out infinite;
-}
-
-@keyframes blink {
-  0%, 10%, 100% {
-    r: 8;
-  }
-  5% {
-    r: 2;
-  }
-}
-
-.robot-arm-left {
-  animation: wave-left 2s ease-in-out infinite;
-  transform-origin: 50px 152px;
-}
-
-.robot-arm-right {
-  animation: wave-right 2s ease-in-out infinite;
-  transform-origin: 150px 152px;
-}
-
-@keyframes wave-left {
-  0%, 100% {
-    transform: rotate(0deg);
-  }
-  50% {
-    transform: rotate(-30deg);
-  }
-}
-
-@keyframes wave-right {
-  0%, 100% {
-    transform: rotate(0deg);
-  }
-  50% {
-    transform: rotate(30deg);
-  }
+/* Dimensiunea fixă pentru robot */
+#lottie-container {
+  width: 400px;
+  height: 400px;
+  margin: 0 auto;
 }

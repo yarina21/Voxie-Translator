@@ -1,23 +1,16 @@
 import { useState } from 'react'
-import LandingPage from './components/LandingPage'
+import LandingPage from './components/LandingPage' // Ajustează calea dacă fișierele nu sunt în folderul 'components'
+import ChatPage from './components/ChatPage'
 
 function App() {
-  const [hasStarted, setHasStarted] = useState(false)
-
-  const handleStart = () => {
-    if (!hasStarted) {
-      setHasStarted(true)
-    }
-  }
+  const [page, setPage] = useState('landing')
 
   return (
-    <div onKeyDown={handleStart} tabIndex={0} style={{ outline: 'none' }}>
-      {!hasStarted ? (
-        <LandingPage />
+    <div>
+      {page === 'landing' ? (
+        <LandingPage onNavigate={() => setPage('chat')} />
       ) : (
-        <div className="w-full min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-200 to-pink-100">
-          <p className="text-2xl text-gray-600">Aplicație în dezvoltare...</p>
-        </div>
+        <ChatPage onBackToLanding={() => setPage('landing')} />
       )}
     </div>
   )

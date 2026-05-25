@@ -1,12 +1,11 @@
 import os
 import uuid
+import requests
 import azure.cognitiveservices.speech as speechsdk
 from dotenv import load_dotenv
 from deep_translator import GoogleTranslator
 from pydub import AudioSegment
 
-
-# Setup căi și încărcare variabile de mediu
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 env_path = os.path.join(base_dir, ".env")
 load_dotenv(dotenv_path=env_path)
@@ -20,140 +19,119 @@ else:
     print(f"--- Voxie: Servicii Azure pregatite pe regiunea {AZURE_REGION} ---")
 
 def transcribe_audio(audio_path: str, source_lang: str = None):
-    """
-    Transcrie audio folosind Azure Speech-to-Text.
-    Daca source_lang este None, foloseste Auto-Detect (limitat la 4 limbi).
-    Daca source_lang este specificat (ex: 'it-IT'), foloseste limba respectiva direct.
-    """
     wav_path = audio_path + "_fix.wav"
+    azure_locales = {
+        "ro": "ro-RO", "en": "en-US", "fr": "fr-FR", "de": "de-DE",
+        "es": "es-ES", "it": "it-IT", "ja": "ja-JP", "zh": "zh-CN",
+        "ar": "ar-SA", "ru": "ru-RU"
+    }
+    
     try:
-        # 1. Preprocesare Audio cu Pydub
-        print(f"--- Incepe conversia pentru: {audio_path} ---")
         audio = AudioSegment.from_file(audio_path)
-        # Export obligatoriu la 16kHz, Mono, WAV pentru acuratețe maximă
         audio.export(wav_path, format="wav", parameters=["-ac", "1", "-ar", "16000"])
-        print(f"--- Conversie reusita: {wav_path} ---")
 
-        # 2. Configurare Azure Speech
         speech_config = speechsdk.SpeechConfig(subscription=AZURE_KEY, region=AZURE_REGION)
         audio_config = speechsdk.audio.AudioConfig(filename=wav_path)
         
-        # LOGICA HIBRIDĂ: Auto-Detect vs Manual
         if source_lang and source_lang != "auto":
-            # Modul Manual: Suportă orice limbă (ex: 'ja-JP', 'it-IT', 'ru-RU')
-            speech_config.speech_recognition_language = source_lang
-            recognizer = speechsdk.SpeechRecognizer(
-                speech_config=speech_config, 
-                audio_config=audio_config
-            )
-            print(f"--- Mod: Recunoastere fixa ({source_lang}) ---")
+            mapped_lang = azure_locales.get(source_lang, "en-US")
+            speech_config.speech_recognition_language = mapped_lang
+            recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
         else:
-            # Modul Auto: Detectează automat între cele 4 limbi de bază
-            # Aceasta configuratie evita eroarea 1007
             auto_detect_config = speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
                 languages=["ro-RO", "en-US", "fr-FR", "de-DE"]
             )
             recognizer = speechsdk.SpeechRecognizer(
-                speech_config=speech_config, 
-                audio_config=audio_config,
-                auto_detect_source_language_config=auto_detect_config
+                speech_config=speech_config, audio_config=audio_config, auto_detect_source_language_config=auto_detect_config
             )
-            print("--- Mod: Auto-Detect (RO, EN, FR, DE) ---")
 
-        # 3. Execuție Recunoaștere
         result = recognizer.recognize_once()
 
-        # 4. Procesare Rezultat
         if result.reason == speechsdk.ResultReason.RecognizedSpeech:
-            # Extrage limba detectată (dacă s-a folosit auto-detect)
             if not source_lang or source_lang == "auto":
-                detected_lang = result.properties[speechsdk.PropertyId.SpeechServiceConnection_AutoDetectSourceLanguageResult]
+                detected_lang_full = result.properties[speechsdk.PropertyId.SpeechServiceConnection_AutoDetectSourceLanguageResult]
+                detected_lang = detected_lang_full.split('-')[0] if detected_lang_full else "auto"
             else:
                 detected_lang = source_lang
-            
-            print(f"--- Succes: [{detected_lang}] {result.text} ---")
             return result.text, detected_lang
 
-        elif result.reason == speechsdk.ResultReason.NoMatch:
-            return "Nu s-a detectat voce clara.", "none"
-
-        elif result.reason == speechsdk.ResultReason.Canceled:
-            details = result.cancellation_details
-            print(f"!!! Azure Error: {details.reason} | {details.error_details} !!!")
-            return f"Eroare Azure: {details.reason}", "error"
-
+        return "Nu s-a detectat voce clara.", "none"
     except Exception as e:
-        print(f"!!! EROARE CRITICA: {str(e)} !!!")
         return f"Eroare procesare: {str(e)}", "error"
-        
     finally:
-        # Șterge fișierul convertit pentru a elibera spațiul
         if os.path.exists(wav_path):
-            os.remove(wav_path)
+            try: os.remove(wav_path)
+            except: pass
 
 def translate_text(text: str, target_lang: str = "en"):
-    """
-    Traduce textul folosind Google Translator (NMT).
-    """
-    # Verificăm dacă textul este valid înainte de a trimite la Google
-    if not text or len(text) < 2 or "Eroare" in text or "Azure Error" in text:
-        return ""
-    
+    if not text or len(text) < 2 or "Eroare" in text: return ""
     try:
-        # 'auto' aici se referă la detectarea limbii textului sursă de către Google
-        translation = GoogleTranslator(source='auto', target=target_lang).translate(text)
-        return translation
+        return GoogleTranslator(source='auto', target=target_lang).translate(text)
     except Exception as e:
-        print(f"!!! Eroare Google Translate: {str(e)} !!!")
         return f"Eroare la traducere: {str(e)}"
     
 def generate_tts(text: str, lang_code: str):
-    """
-    Transformă textul tradus în audio (MP3) folosind Azure TTS.
-    """
-    # Mapare coduri scurte Google către coduri complete Azure TTS
+    if not text: return None
     voices = {
-        # EUROPA
-    "ro": "ro-RO-AlinaNeural",      # Romana
-    "en": "en-US-JennyNeural",      # Engleza (US)
-    "en-GB": "en-GB-SoniaNeural",   # Engleza (UK)
-    "it": "it-IT-ElsaNeural",       # Italiana
-    "fr": "fr-FR-DeniseNeural",     # Franceza
-    "de": "de-DE-KatjaNeural",      # Germana
-    "es": "es-ES-ElviraNeural",     # Spaniola
-    "pt": "pt-PT-RaquelNeural",     # Portugheza
-    
-    # ASIA & ORIENT
-    "ja": "ja-JP-NanamiNeural",     # Japoneza
-    "ko": "ko-KR-SunHiNeural",      # Coreeana
-    "zh": "zh-CN-XiaoxiaoNeural",   # Chineza (Mandarina)
-    "ar": "ar-SA-ZariyahNeural",    # Araba
-    "hi": "hi-IN-SwaraNeural",      # Hindi
-    "tr": "tr-TR-EmelNeural",       # Turca
-    
-    # ALTELE
-    "ru": "ru-RU-SvetlanaNeural",   # Rusa
-    "uk": "uk-UA-PolinaNeural",     # Ucraineana
-    "el": "el-GR-AthinaNeural"      # Greaca
+        "ro": "ro-RO-AlinaNeural", "en": "en-US-JennyNeural", "it": "it-IT-ElsaNeural",       
+        "fr": "fr-FR-DeniseNeural", "de": "de-DE-KatjaNeural", "es": "es-ES-ElviraNeural",     
+        "ja": "ja-JP-NanamiNeural", "zh": "zh-CN-XiaoxiaoNeural", "ar": "ar-SA-ZariyahNeural",    
+        "ru": "ru-RU-SvetlanaNeural"      
     }
-    
-    # Luăm vocea corespunzătoare sau fallback pe Engleză
-    voice_name = voices.get(lang_code.split('-')[0], "en-US-JennyNeural")
-    
-    # Numele fișierului audio de ieșire
+    prefix = lang_code.split('-')[0]
+    voice_name = voices.get(prefix, "en-US-JennyNeural")
     output_filename = f"tts_{uuid.uuid4()}.mp3"
     output_path = os.path.join(os.getcwd(), output_filename)
 
-    speech_config = speechsdk.SpeechConfig(subscription=AZURE_KEY, region=AZURE_REGION)
-    speech_config.speech_synthesis_voice_name = voice_name
-    
-    # Configurăm ieșirea către un fișier
-    audio_config = speechsdk.audio.AudioOutputConfig(filename=output_path)
-    synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
-
-    result = synthesizer.speak_text_async(text).get()
-
-    if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-        return output_filename
-    else:
+    try:
+        speech_config = speechsdk.SpeechConfig(subscription=AZURE_KEY, region=AZURE_REGION)
+        speech_config.speech_synthesis_voice_name = voice_name
+        audio_config = speechsdk.audio.AudioOutputConfig(filename=output_path)
+        synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
+        result = synthesizer.speak_text_async(text).get()
+        if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted: return output_filename
         return None
+    except:
+        return None
+
+# --- FUNCȚII NOI (MUTATE DIN FRONTEND) ---
+
+def get_dictionary_info(word: str, lang: str):
+    print(f"DEBUG dict: word='{word}', lang='{lang}'")  # <-- adaugă asta
+    
+    if lang != "en" or len(word.split()) > 1:
+        print(f"DEBUG dict: skipped - lang={lang}, words={len(word.split())}")
+        return None
+        
+    clean_word = "".join(c for c in word if c.isalpha() or c == "'").lower()
+    print(f"DEBUG dict: clean_word='{clean_word}'")  # <-- și asta
+    
+    if not clean_word: return None
+    
+    try:
+        res = requests.get(f"https://api.dictionaryapi.dev/api/v2/entries/en/{clean_word}", timeout=3)
+        print(f"DEBUG dict: status={res.status_code}")  # <-- și asta
+        if res.status_code == 200:
+            data = res.json()[0]
+            if "meanings" in data and len(data["meanings"]) > 0:
+                meaning = data["meanings"][0]
+                return {
+                    "partOfSpeech": meaning.get("partOfSpeech", ""),
+                    "synonyms": meaning.get("synonyms", [])[:3]
+                }
+    except Exception as e:
+        print(f"DEBUG dict: EROARE - {e}")  # <-- și asta
+    return None
+
+def get_wiki_trivia(lang_name: str):
+    """Extrage curiozități direct din Wikipedia pe backend."""
+    try:
+        page_title = f"Limba_{lang_name.lower()}"
+        res = requests.get(f"https://ro.wikipedia.org/api/rest_v1/page/summary/{page_title}", timeout=3)
+        if res.status_code == 200:
+            extract = res.json().get("extract", "")
+            if extract:
+                return extract.split('.')[0] + '.'
+    except:
+        pass
+    return "Știai că există peste 7.000 de limbi vorbite în prezent? 🌍"
