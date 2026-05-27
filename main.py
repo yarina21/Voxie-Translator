@@ -4,7 +4,12 @@ import uuid
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from backend.services import transcribe_audio, translate_text, generate_tts, get_dictionary_info, get_wiki_trivia
+from pydantic import BaseModel
+from backend.services import (
+    transcribe_audio, translate_text, generate_tts, 
+    get_dictionary_info, get_wiki_trivia, 
+    get_all_favorites, save_favorite, delete_favorite
+)
 
 app = FastAPI(title="Voxie API")
 app.mount("/static", StaticFiles(directory="."), name="static")
@@ -13,11 +18,19 @@ app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
 
+# Structura pentru elementele favorite
+class FavoriteItem(BaseModel):
+    id: int
+    original: str  # Asigură-te că este str (string)
+    translated: str
+    from_lang: str
+    to_lang: str
+    timestamp: str
+
 @app.get("/")
 def home():
     return {"message": "Voxie Online - Backend is running"}
 
-# Rută nouă DOAR pentru a cere curiozități din Wikipedia
 @app.get("/api/trivia")
 def get_trivia(lang_name: str = "Engleză"):
     fact = get_wiki_trivia(lang_name)
@@ -40,9 +53,8 @@ async def process_audio(
         text_tradus = translate_text(text_original, target_lang=target_lang)
         audio_file = generate_tts(text_tradus, target_lang)
         
-        # --- Aici am adăugat logica de dicționar și fonetică ---
-        dictionary_data = get_dictionary_info(text_tradus, target_lang)
-        phonetics = "[Exemplu: kon-ni-chi-wa]" if target_lang == "ja" else None
+        dict_data = get_dictionary_info(text_tradus, target_lang)
+        phonetics = dict_data.get("phonetic") if dict_data else None
         
         return {
             "status": "success",
@@ -51,8 +63,8 @@ async def process_audio(
             "translated_text": text_tradus,
             "target_language": target_lang,
             "audio_url": f"http://127.0.0.1:8000/static/{audio_file}" if audio_file else None,
-            "dictionary": dictionary_data,   # Acum trimitem datele reale
-            "phonetics": phonetics           # Acum trimitem datele reale
+            "dictionary": dict_data,
+            "phonetics": phonetics
         }
     except Exception as e:
         print(f"DEBUG: EROARE AUDIO: {e}")
@@ -66,24 +78,36 @@ async def process_text(text: str = Form(...), target_lang: str = Form("en")):
         text_tradus = translate_text(text, target_lang=target_lang)
         audio_file = generate_tts(text_tradus, target_lang)
         
-        # Obținem datele
-        # Folosim funcția care caută în API-ul de dicționar
-        dict_data = get_dictionary_info(text_tradus, "en") 
-        
-        # Fonetică reală sau un mesaj util
-        phon_text = "Se citește fonetic" if target_lang != "en" else None
+        dict_data = get_dictionary_info(text_tradus, target_lang)
+        phonetics = dict_data.get("phonetic") if dict_data else None
 
         return {
             "status": "success",
             "original_text": text,
             "translated_text": text_tradus,
             "audio_url": f"http://127.0.0.1:8000/static/{audio_file}" if audio_file else None,
-            "dictionary": dict_data,  # Aici trimitem datele reale (sau None dacă nu există)
-            "phonetics": phon_text   # Aici trimitem fonetica
+            "dictionary": dict_data,
+            "phonetics": phonetics
         }
     except Exception as e:
         print(f"DEBUG: EROARE ROUTE: {e}")
         return {"status": "error", "message": str(e)}
+
+# --- RUTE PENTRU FAVORITE ---
+
+@app.get("/api/favorites")
+def fetch_favorites():
+    return {"favorites": get_all_favorites()}
+
+@app.post("/api/favorites")
+def add_favorite(fav: FavoriteItem):
+    updated_favs = save_favorite(fav.dict())
+    return {"status": "success", "favorites": updated_favs}
+
+@app.delete("/api/favorites/{fav_id}")
+def remove_favorite(fav_id: int):
+    updated_favs = delete_favorite(fav_id)
+    return {"status": "success", "favorites": updated_favs}
 
 if __name__ == "__main__":
     import uvicorn

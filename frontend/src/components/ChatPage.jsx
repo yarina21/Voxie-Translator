@@ -62,7 +62,6 @@ function LanguageDropdown({ selectedCode, onSelect, languages, textColor, align 
 
 // --- Componenta Principală ChatPage ---
 export default function ChatPage({ onBackToLanding }) {
-  // Stări aplicație
   const [appState, setAppState] = useState('idle') 
   const [inputText, setInputText] = useState('') 
   const [transcribedText, setTranscribedText] = useState('')
@@ -71,7 +70,6 @@ export default function ChatPage({ onBackToLanding }) {
   const [backendAudioUrl, setBackendAudioUrl] = useState(null)
   const [dynamicFact, setDynamicFact] = useState('Sunt conectat la server. Apasă microfonul sau scrie textul! 🚀')
   
-  // Stări UI Premium
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isDark, setIsDark] = useState(false) 
   const [playbackSpeed, setPlaybackSpeed] = useState(1) 
@@ -83,13 +81,16 @@ export default function ChatPage({ onBackToLanding }) {
   const messagesEndRef = useRef(null)
   const mediaRecorderRef = useRef(null)
   const audioChunksRef = useRef([])
+  const audioRef = useRef(null)
 
   const [dictionaryData, setDictionaryData] = useState(null);
   const [phoneticText, setPhoneticText] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [favorites, setFavorites] = useState([]);
+  const [showCopyToast, setShowCopyToast] = useState(false);
+  const [activeTab, setActiveTab] = useState('activity'); 
   
   const isTextMode = inputText.trim().length > 0
-  const isSingleWord = translatedText && !translatedText.trim().includes(' ')
-  const charLimit = 5000
 
   const sourceLanguages = [
     { code: 'auto', name: 'Auto-Detectare' },
@@ -105,7 +106,19 @@ export default function ChatPage({ onBackToLanding }) {
     { code: 'ja', name: 'Japoneză' }, { code: 'zh', name: 'Chineză' }
   ]
 
-  // --- Efect: Caută informații reale pe Wikipedia la schimbarea limbii ---
+  useEffect(() => {
+    const fetchFavorites = async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:8000/api/favorites')
+        const data = await res.json()
+        if (data.favorites) setFavorites(data.favorites)
+      } catch (err) {
+        console.error("Eroare incarcare favorite:", err)
+      }
+    }
+    fetchFavorites()
+  }, [])
+
   useEffect(() => {
     const fetchWikiFact = async () => {
       setDynamicFact('Caut informații pe internet... 🔍')
@@ -128,32 +141,40 @@ export default function ChatPage({ onBackToLanding }) {
       }
     }
     
-    if (appState === 'idle') {
-      fetchWikiFact()
-    }
+    if (appState === 'idle') fetchWikiFact()
   }, [targetLang, appState])
 
-  // --- Funcție Redare Audio (Robotul vorbește) ---
   const autoPlayAudio = (url) => {
     if (url) {
-      const audio = new Audio(url)
-      audio.playbackRate = playbackSpeed
-      audio.play()
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+      
+      const audio = new Audio(url);
+      audio.playbackRate = playbackSpeed;
+      audioRef.current = audio;
+      
+      const handlePlay = () => setIsPlaying(true);
+      const handleEnded = () => setIsPlaying(false);
+      const handlePause = () => setIsPlaying(false);
+      
+      audio.addEventListener("play", handlePlay);
+      audio.addEventListener("ended", handleEnded);
+      audio.addEventListener("pause", handlePause);
+      
+      audio.play().catch(err => console.error("Play error:", err));
     }
   }
 
-  // --- FIX: handleResponse este acum funcția centrală care procesează orice răspuns de la backend ---
   const handleResponse = (data, input = "") => {
     setTranslatedText(data.translated_text);
     setBackendAudioUrl(data.audio_url);
     setDictionaryData(data.dictionary || null);
     setPhoneticText(data.phonetics || null);
     
-    if (data.audio_url) {
-      const audio = new Audio(data.audio_url);
-      audio.playbackRate = playbackSpeed;
-      audio.play();
-    }
+    if (data.audio_url) autoPlayAudio(data.audio_url);
+    
     setMessages(prev => [{ 
       id: Date.now(), 
       original: data.original_text || input, 
@@ -163,7 +184,6 @@ export default function ChatPage({ onBackToLanding }) {
     }, ...prev]);
   };
 
-  // --- Trimitere TEXT către Backend ---
   const handleTextAction = async () => {
     if (appState === 'processing' || !isTextMode) return
     setAppState('processing')
@@ -176,7 +196,6 @@ export default function ChatPage({ onBackToLanding }) {
       const response = await fetch('http://127.0.0.1:8000/process-text', { method: 'POST', body: formData })
       const data = await response.json()
       
-      // FIX: folosim handleResponse în loc de setări manuale
       if (data.status === 'success') {
         handleResponse(data, inputText)
         setInputText('')
@@ -189,7 +208,6 @@ export default function ChatPage({ onBackToLanding }) {
     }
   }
 
-  // --- Trimitere VOCE către Backend ---
   const toggleRecording = async () => {
     if (appState === 'idle') {
       try {
@@ -214,7 +232,6 @@ export default function ChatPage({ onBackToLanding }) {
             const response = await fetch('http://127.0.0.1:8000/process-audio', { method: 'POST', body: formData })
             const data = await response.json()
             
-            // FIX: folosim handleResponse în loc de setări manuale
             if (data.status === 'success') {
               setTranscribedText(data.original_text)
               handleResponse(data)
@@ -236,12 +253,78 @@ export default function ChatPage({ onBackToLanding }) {
     }
   }
 
-  // Redare manuală
   const handleManualSpeak = () => {
     if (backendAudioUrl) autoPlayAudio(backendAudioUrl)
   }
 
-  // Tasta Enter pentru Text
+  const handleCopy = () => {
+    navigator.clipboard.writeText(translatedText).then(() => {
+      setShowCopyToast(true)
+      setTimeout(() => setShowCopyToast(false), 2000)
+    }).catch(err => console.error('Eroare copiere:', err))
+  }
+
+  const handleAddFavorite = async () => {
+    // Luăm textul original din ultimul mesaj din istoric (care e cel de sus)
+    const originalText = messages.length > 0 ? messages[0].original : "Fără text";
+    
+    const favorite = {
+      id: Date.now(),
+      original: originalText, // Acum va fi sigur textul tradus anterior
+      translated: translatedText,
+      from_lang: sourceLang,
+      to_lang: targetLang,
+      timestamp: new Date().toLocaleString('ro-RO')
+    }
+    
+    setFavorites(prev => [favorite, ...prev])
+
+    try {
+      await fetch('http://127.0.0.1:8000/api/favorites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(favorite)
+      })
+    } catch (err) {
+      console.error("Eroare la salvare favorit:", err)
+    }
+  }
+
+  const handleRemoveFavorite = async (id) => {
+    setFavorites(prev => prev.filter(fav => fav.id !== id))
+    
+    try {
+      await fetch(`http://127.0.0.1:8000/api/favorites/${id}`, { method: 'DELETE' })
+    } catch (err) {
+      console.error("Eroare stergere favorit:", err)
+    }
+  }
+
+  // --- EXPORT FAVORITE CA FIȘIER TEXT ---
+  const handleExportFavorites = () => {
+    if (favorites.length === 0) return;
+
+    let fileContent = "=== VOCABULAR VOXIE AI ===\n\n";
+
+    favorites.forEach((fav, index) => {
+      fileContent += `${index + 1}. [${fav.from_lang.toUpperCase()} -> ${fav.to_lang.toUpperCase()}]\n`;
+      fileContent += `   Original: ${fav.original}\n`;
+      fileContent += `   Traducere: ${fav.translated}\n`;
+      fileContent += `   Salvat la: ${fav.timestamp}\n`;
+      fileContent += `--------------------------------------\n`;
+    });
+
+    const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'vocabular_voxie.txt';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -258,11 +341,12 @@ export default function ChatPage({ onBackToLanding }) {
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
-  // Logica Mesaj Robot
   const getRobotMessage = () => {
     if (appState === 'listening') return <span className="text-3xl animate-pulse">Te ascult...</span>
     if (appState === 'processing') return 'Analizez la backend... ⏳'
-    if (isTextMode) return 'Apasă trimite pentru a traduce! ✨'
+    if (isTextMode && !translatedText) return 'Apasă trimite pentru a traduce! ✨'
+    if (translatedText && appState === 'idle') return 'Iată traducerea ta! 🤖'
+
     return (
       <span className="flex flex-col items-center gap-1">
         <span className="text-xs font-bold uppercase tracking-widest text-pink-500 mb-1">💡 Știai că:</span>
@@ -271,7 +355,6 @@ export default function ChatPage({ onBackToLanding }) {
     )
   }
 
-  // Teme Vizuale
   const theme = {
     bg: isDark ? '#0f172a' : '#fff0f5', 
     textMain: isDark ? '#f8fafc' : '#2c2c2c',
@@ -282,7 +365,6 @@ export default function ChatPage({ onBackToLanding }) {
     accent: isDark ? '#f472b6' : '#D4A5C4'
   }
   
-
   return (
     <div className={`w-full min-h-screen flex flex-col relative overflow-hidden transition-colors duration-500 ${isDark ? 'dark-mode-active' : ''}`} style={{ background: theme.bg }}>
       
@@ -302,7 +384,7 @@ export default function ChatPage({ onBackToLanding }) {
         {/* Robot */}
         <div className="flex-1 flex flex-col items-center justify-center relative">
           <div className={`speech-bubble mb-8 transition-all duration-300 ${isDark ? 'dark-bubble' : ''}`}>
-            <p className="speech-text min-h-[60px] flex items-center justify-center text-center" style={{ color: theme.textMain }}>
+            <p className="speech-text min-h-[60px] flex items-center justify-center text-center transition-colors" style={{ color: theme.textMain }}>
               {getRobotMessage()}
             </p>
           </div>
@@ -316,12 +398,28 @@ export default function ChatPage({ onBackToLanding }) {
             {/* Limbile */}
             <div className="flex items-center justify-between mb-6 p-2 rounded-2xl shadow-sm" style={{ background: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.5)', border: `1px solid ${theme.cardBorder}` }}>
               <LanguageDropdown selectedCode={sourceLang} onSelect={setSourceLang} languages={sourceLanguages} textColor={theme.textMuted} isDark={isDark} />
+              
+              {/* FIX IMPLEMENTAT: Buton de Swap inteligent cu tot cu text */}
               <button 
-                onClick={() => { if(sourceLang !== 'auto') { const t = sourceLang; setSourceLang(targetLang); setTargetLang(t) } }}
+                onClick={() => { 
+                  if(sourceLang !== 'auto') { 
+                    const t = sourceLang; 
+                    setSourceLang(targetLang); 
+                    setTargetLang(t);
+                    if (translatedText) {
+                      setInputText(translatedText);
+                      setTranslatedText('');
+                      setDictionaryData(null);
+                      setPhoneticText(null);
+                      setBackendAudioUrl(null);
+                    }
+                  } 
+                }}
                 disabled={sourceLang === 'auto'}
                 className="p-3 rounded-full transition-all shadow-sm disabled:opacity-50"
                 style={{ background: isDark ? 'rgba(255,255,255,0.1)' : 'white', color: theme.accent, cursor: sourceLang === 'auto' ? 'not-allowed' : 'pointer' }}
               >⇄</button>
+              
               <LanguageDropdown selectedCode={targetLang} onSelect={setTargetLang} languages={targetLanguages} textColor={theme.accent} align="right" isDark={isDark} />
             </div>
 
@@ -347,37 +445,103 @@ export default function ChatPage({ onBackToLanding }) {
                 {appState === 'processing' ? <span className="opacity-50 text-xl">Backend-ul procesează...</span> : (translatedText || <span className="opacity-30 text-xl font-normal" style={{ color: theme.textMuted }}>Traducerea va apărea aici</span>)}
               </p>
 
-              {/* FIX: Fonetică și Dicționar afișate în interiorul cardului, sub textul tradus */}
-              {phoneticText && (
-                <p className="text-sm mt-2 font-mono" style={{ color: theme.textMuted }}>
-                  🔤 {phoneticText}
-                </p>
+              {/* Fonetică */}
+              {(phoneticText || (dictionaryData && dictionaryData.phonetic)) && (
+                <div className="mt-3 p-3 rounded-lg" style={{ background: isDark ? 'rgba(236, 72, 153, 0.08)' : 'rgba(236, 72, 153, 0.1)', border: `1px solid ${isDark ? 'rgba(236, 72, 153, 0.2)' : 'rgba(236, 72, 153, 0.3)'}` }}>
+                  <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-1" style={{ color: theme.accent }}>🔊 Pronunție Fonetică</p>
+                  <p className="text-sm font-mono" style={{ color: theme.accent }}>
+                    {phoneticText || dictionaryData?.phonetic}
+                  </p>
+                </div>
               )}
 
+              {/* Dicționar */}
               {dictionaryData && (
-                <div className="mt-4 p-4 border rounded-xl" style={{ borderColor: theme.cardBorder }}>
-                    <h3 className="text-xs font-bold opacity-50">DICȚIONAR ({dictionaryData.partOfSpeech})</h3>
-    
-                <div className="mt-2">
-                  <p className="text-sm font-semibold">Sinonime găsite:</p>
-                {dictionaryData.synonyms && dictionaryData.synonyms.length > 0 ? (
-                    <div className="flex gap-2 mt-1 flex-wrap">
-                        {dictionaryData.synonyms.map((s, index) => (
-                            <span key={index} className="px-3 py-1 rounded-full bg-black/10 text-sm">
-                                {s}
-                            </span>
-                        ))}
+                <div className="mt-4 p-4 rounded-xl" style={{ background: isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(248, 250, 252, 0.8)', border: `1px solid ${theme.cardBorder}` }}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-lg">📖</span>
+                    <h3 className="text-xs font-bold uppercase tracking-widest opacity-70">Dicționar{dictionaryData.partOfSpeech ? ` • ${dictionaryData.partOfSpeech}` : ''}</h3>
+                  </div>
+                  
+                  {dictionaryData.definition && (
+                    <div className="mb-3">
+                      <p className="text-[11px] font-bold uppercase tracking-widest opacity-50 mb-1" style={{ color: theme.textMuted }}>Definiție:</p>
+                      <p className="text-sm leading-relaxed" style={{ color: theme.textMain }}>
+                        {dictionaryData.definition}
+                      </p>
                     </div>
-      ) : (
-        <p className="text-sm italic opacity-60">Nu există sinonime în baza de date.</p>
-      )}
-    </div>
-  </div>
-)}
+                  )}
+
+                  {dictionaryData.synonyms && dictionaryData.synonyms.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-widest opacity-50 mb-2" style={{ color: theme.textMuted }}>Sinonime:</p>
+                      <div className="flex gap-2 flex-wrap">
+                        {dictionaryData.synonyms.map((s, index) => (
+                          <span 
+                            key={index} 
+                            className="px-3 py-1.5 rounded-full text-xs font-medium transition-all hover:scale-105 cursor-default"
+                            style={{ 
+                              background: isDark ? 'rgba(236, 72, 153, 0.15)' : 'rgba(236, 72, 153, 0.1)',
+                              color: theme.accent,
+                              border: `1px solid ${isDark ? 'rgba(236, 72, 153, 0.3)' : 'rgba(236, 72, 153, 0.3)'}`
+                            }}
+                          >
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {(!dictionaryData.synonyms || dictionaryData.synonyms.length === 0) && !dictionaryData.definition && (
+                    <p className="text-xs italic opacity-50" style={{ color: theme.textMuted }}>
+                      Informații limitate disponibile pentru acest cuvânt.
+                    </p>
+                  )}
+                </div>
+              )}
               
-              {/* Toolbar Audio */}
+              {/* Toolbar Audio și Acțiuni */}
               {translatedText && appState === 'idle' && (
-                <div className="flex justify-end mt-4">
+                <div className="flex justify-between items-center mt-4">
+                  <div className="flex items-center gap-3">
+                    {/* Buton Copy */}
+                    <div className="relative">
+                      <button 
+                        onClick={handleCopy} 
+                        className="p-2 hover:opacity-70 transition-all relative" 
+                        title="Copiază textul tradus"
+                        style={{ color: theme.textMuted }}
+                      >
+                        {showCopyToast ? (
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"></path></svg>
+                        ) : (
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                        )}
+                      </button>
+                      {showCopyToast && (
+                        <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 px-2 py-1 bg-black text-white text-xs rounded whitespace-nowrap">
+                          Copiat!
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Buton Favorite */}
+                    <button 
+                      onClick={handleAddFavorite} 
+                      className="p-2 hover:opacity-70 transition-all" 
+                      title="Adaugă în favorite"
+                      style={{ color: favorites.some(f => f.translated === translatedText) ? '#ec4899' : theme.textMuted }}
+                    >
+                      {favorites.some(f => f.translated === translatedText) ? (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Toolbar Audio */}
                   {backendAudioUrl && (
                     <div className="flex items-center gap-1 bg-black/5 rounded-full pr-2 p-1" style={{ border: `1px solid ${theme.cardBorder}`}}>
                       <button onClick={handleManualSpeak} className="p-1 hover:text-pink-500 transition-colors" title="Ascultă din Backend (Azure)">
@@ -411,21 +575,97 @@ export default function ChatPage({ onBackToLanding }) {
         </div>
       </div>
       
-      {/* SIDEBAR ISTORIC */}
+      {/* SIDEBAR ISTORIC ȘI FAVORITE */}
       <div className={`fixed top-0 right-0 h-full w-[360px] shadow-2xl z-50 transform transition-all duration-500 ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`} style={{ background: isDark ? 'rgba(15, 23, 42, 0.98)' : 'rgba(255, 255, 255, 0.98)', borderLeft: `1px solid ${theme.cardBorder}` }}>
         <div className="p-6 h-full flex flex-col">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-bold" style={{ color: theme.textMain }}>Activitate</h2>
             <button onClick={() => setIsSidebarOpen(false)} className="hover:text-pink-500" style={{ color: theme.textMuted }}>X</button>
           </div>
+
+          {/* Tab-uri */}
+          <div className="flex gap-2 mb-4 border-b" style={{ borderColor: theme.cardBorder }}>
+            <button
+              onClick={() => setActiveTab('activity')}
+              className="px-4 py-2 text-sm font-bold transition-all"
+              style={{
+                color: activeTab === 'activity' ? theme.accent : theme.textMuted,
+                borderBottom: activeTab === 'activity' ? `2px solid ${theme.accent}` : 'none'
+              }}
+            >
+              Istoric
+            </button>
+            <button
+              onClick={() => setActiveTab('favorites')}
+              className="px-4 py-2 text-sm font-bold transition-all flex items-center gap-1"
+              style={{
+                color: activeTab === 'favorites' ? theme.accent : theme.textMuted,
+                borderBottom: activeTab === 'favorites' ? `2px solid ${theme.accent}` : 'none'
+              }}
+            >
+              ❤️ Favorite {favorites.length > 0 && `(${favorites.length})`}
+            </button>
+          </div>
+
+          {/* Conținut Tab-uri */}
           <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 flex flex-col gap-4">
-             {messages.map((msg) => (
-                <div key={msg.id} className="p-4 rounded-xl border relative" style={{ background: isDark ? 'rgba(255,255,255,0.03)' : '#f9fafb', borderColor: theme.cardBorder }}>
-                  <span className="text-[10px] font-bold uppercase tracking-widest opacity-60" style={{ color: theme.textMuted }}>{msg.from} → {msg.to}</span>
-                  <p className="text-sm font-medium mt-1" style={{ color: theme.textMain }}>{msg.original}</p>
-                  <p className="text-md font-bold mt-1" style={{ color: theme.accent }}>{msg.translated}</p>
-                </div>
-              ))}
+            {activeTab === 'activity' && (
+              <>
+                {messages.length === 0 ? (
+                  <p className="text-xs text-center opacity-50" style={{ color: theme.textMuted }}>Nicio traducere încă</p>
+                ) : (
+                  messages.map((msg) => (
+                    <div key={msg.id} className="p-4 rounded-xl border relative" style={{ background: isDark ? 'rgba(255,255,255,0.03)' : '#f9fafb', borderColor: theme.cardBorder }}>
+                      <span className="text-[10px] font-bold uppercase tracking-widest opacity-60" style={{ color: theme.textMuted }}>{msg.from} → {msg.to}</span>
+                      <p className="text-sm font-medium mt-1" style={{ color: theme.textMain }}>{msg.original}</p>
+                      <p className="text-md font-bold mt-1" style={{ color: theme.accent }}>{msg.translated}</p>
+                    </div>
+                  ))
+                )}
+              </>
+            )}
+
+            {activeTab === 'favorites' && (
+              <>
+                {/* FIX IMPLEMENTAT: Buton dedicat de export txt pe calculator */}
+                {favorites.length > 0 && (
+                  <button 
+                    onClick={handleExportFavorites}
+                    className="w-full mb-2 py-2.5 rounded-xl text-xs font-bold shadow-sm border transition-all hover:scale-[1.02] cursor-pointer"
+                    style={{ borderColor: theme.accent, color: theme.textMain, background: 'transparent' }}
+                  >
+                    📥 Descarcă Vocabular (.txt)
+                  </button>
+                )}
+
+                {favorites.length === 0 ? (
+                  <p className="text-xs text-center opacity-50" style={{ color: theme.textMuted }}>Niciun favorit adăugat</p>
+                ) : (
+                  favorites.map((fav) => (
+                    <div key={fav.id} className="p-4 rounded-xl border relative group" style={{ background: isDark ? 'rgba(255,255,255,0.03)' : '#f9fafb', borderColor: theme.cardBorder }}>
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-[10px] font-bold uppercase tracking-widest opacity-60" style={{ color: theme.textMuted }}>
+                          {fav.from_lang} → {fav.to_lang}
+                        </span>
+                        
+                        {/* BUTONUL DE ȘTERGERE DIN FAVORITE */}
+                        <button
+                          onClick={() => handleRemoveFavorite(fav.id)}
+                          className="px-2 py-1 rounded-lg text-[10px] font-bold transition-all bg-red-100 text-red-600 hover:bg-red-500 hover:text-white"
+                          title="Elimină din favorite"
+                        >
+                          ELIMINĂ
+                        </button>
+                      </div>
+                      
+                      <p className="text-sm font-medium" style={{ color: theme.textMain }}>{fav.original}</p>
+                      <p className="text-md font-bold mt-1" style={{ color: theme.accent }}>{fav.translated}</p>
+                      <p className="text-[10px] opacity-40 mt-2" style={{ color: theme.textMuted }}>{fav.timestamp}</p>
+                    </div>
+                  ))
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import os
 import uuid
 import requests
+import json
 import azure.cognitiveservices.speech as speechsdk
 from dotenv import load_dotenv
 from deep_translator import GoogleTranslator
@@ -94,37 +95,63 @@ def generate_tts(text: str, lang_code: str):
     except:
         return None
 
-# --- FUNCȚII NOI (MUTATE DIN FRONTEND) ---
-
 def get_dictionary_info(word: str, lang: str):
-    print(f"DEBUG dict: word='{word}', lang='{lang}'")  # <-- adaugă asta
+    print(f"DEBUG dict: word='{word}', lang='{lang}'")
     
-    if lang != "en" or len(word.split()) > 1:
-        print(f"DEBUG dict: skipped - lang={lang}, words={len(word.split())}")
+    if len(word.split()) > 1:
+        print(f"DEBUG dict: skipped - multi-word ({len(word.split())} words)")
         return None
         
     clean_word = "".join(c for c in word if c.isalpha() or c == "'").lower()
-    print(f"DEBUG dict: clean_word='{clean_word}'")  # <-- și asta
+    print(f"DEBUG dict: clean_word='{clean_word}'")
     
     if not clean_word: return None
     
+    result = {}
+    
     try:
-        res = requests.get(f"https://api.dictionaryapi.dev/api/v2/entries/en/{clean_word}", timeout=3)
-        print(f"DEBUG dict: status={res.status_code}")  # <-- și asta
-        if res.status_code == 200:
-            data = res.json()[0]
-            if "meanings" in data and len(data["meanings"]) > 0:
-                meaning = data["meanings"][0]
-                return {
-                    "partOfSpeech": meaning.get("partOfSpeech", ""),
-                    "synonyms": meaning.get("synonyms", [])[:3]
-                }
+        print(f"DEBUG dict: Fetching from Datamuse...")
+        datamuse_url = f"https://api.datamuse.com/words?rel_syn={clean_word}&max=5"
+        dm_res = requests.get(datamuse_url, timeout=3)
+        print(f"DEBUG dict: Datamuse status={dm_res.status_code}")
+        
+        if dm_res.status_code == 200:
+            dm_data = dm_res.json()
+            if dm_data:
+                result["synonyms"] = [word["word"] for word in dm_data[:5]]
+                print(f"DEBUG dict: Synonyms found: {result['synonyms']}")
+        
+        print(f"DEBUG dict: Fetching from Free Dictionary API...")
+        fd_url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{clean_word}"
+        fd_res = requests.get(fd_url, timeout=3)
+        print(f"DEBUG dict: Free Dictionary status={fd_res.status_code}")
+        
+        if fd_res.status_code == 200:
+            fd_data = fd_res.json()[0]
+            
+            if "phonetic" in fd_data and fd_data["phonetic"]:
+                result["phonetic"] = fd_data["phonetic"]
+            elif "phonetics" in fd_data and len(fd_data["phonetics"]) > 0:
+                result["phonetic"] = fd_data["phonetics"][0].get("text", "")
+            
+            if "meanings" in fd_data and len(fd_data["meanings"]) > 0:
+                meaning = fd_data["meanings"][0]
+                result["partOfSpeech"] = meaning.get("partOfSpeech", "")
+                
+                if "synonyms" not in result and meaning.get("synonyms"):
+                    result["synonyms"] = meaning.get("synonyms", [])[:5]
+                
+                if "definitions" in meaning and len(meaning["definitions"]) > 0:
+                    result["definition"] = meaning["definitions"][0].get("definition", "")
+        
+        print(f"DEBUG dict: Final result={result}")
+        return result if result else None
+        
     except Exception as e:
-        print(f"DEBUG dict: EROARE - {e}")  # <-- și asta
+        print(f"DEBUG dict: EROARE - {e}")
     return None
 
 def get_wiki_trivia(lang_name: str):
-    """Extrage curiozități direct din Wikipedia pe backend."""
     try:
         page_title = f"Limba_{lang_name.lower()}"
         res = requests.get(f"https://ro.wikipedia.org/api/rest_v1/page/summary/{page_title}", timeout=3)
@@ -132,6 +159,43 @@ def get_wiki_trivia(lang_name: str):
             extract = res.json().get("extract", "")
             if extract:
                 return extract.split('.')[0] + '.'
-    except:
-        pass
+    except Exception as e:
+        print(f"DEBUG trivia: EROARE - {e}")
     return "Știai că există peste 7.000 de limbi vorbite în prezent? 🌍"
+
+# --- FUNCȚII PENTRU FAVORITE (PERSISTENȚĂ JSON) ---
+
+FAVORITES_FILE = os.path.join(base_dir, "favorites.json")
+
+def _ensure_favorites_file():
+    if not os.path.exists(FAVORITES_FILE):
+        with open(FAVORITES_FILE, "w", encoding="utf-8") as f:
+            json.dump([], f)
+
+def get_all_favorites():
+    _ensure_favorites_file()
+    try:
+        with open(FAVORITES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Eroare la citirea favoritelor: {e}")
+        return []
+
+def save_favorite(fav_data: dict):
+    favs = get_all_favorites()
+    
+    if not any(f.get("original") == fav_data.get("original") and f.get("translated") == fav_data.get("translated") for f in favs):
+        favs.insert(0, fav_data) 
+        with open(FAVORITES_FILE, "w", encoding="utf-8") as f:
+            json.dump(favs, f, ensure_ascii=False, indent=2)
+            
+    return favs
+
+def delete_favorite(fav_id: int):
+    favs = get_all_favorites()
+    favs = [f for f in favs if f.get("id") != fav_id]
+    
+    with open(FAVORITES_FILE, "w", encoding="utf-8") as f:
+        json.dump(favs, f, ensure_ascii=False, indent=2)
+        
+    return favs
