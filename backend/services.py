@@ -2,6 +2,8 @@ import os
 import uuid
 import requests
 import json
+import random
+import re
 import azure.cognitiveservices.speech as speechsdk
 from dotenv import load_dotenv
 from deep_translator import GoogleTranslator
@@ -96,35 +98,26 @@ def generate_tts(text: str, lang_code: str):
         return None
 
 def get_dictionary_info(word: str, lang: str):
-    print(f"DEBUG dict: word='{word}', lang='{lang}'")
-    
     if len(word.split()) > 1:
-        print(f"DEBUG dict: skipped - multi-word ({len(word.split())} words)")
         return None
         
     clean_word = "".join(c for c in word if c.isalpha() or c == "'").lower()
-    print(f"DEBUG dict: clean_word='{clean_word}'")
     
     if not clean_word: return None
     
     result = {}
     
     try:
-        print(f"DEBUG dict: Fetching from Datamuse...")
         datamuse_url = f"https://api.datamuse.com/words?rel_syn={clean_word}&max=5"
         dm_res = requests.get(datamuse_url, timeout=3)
-        print(f"DEBUG dict: Datamuse status={dm_res.status_code}")
         
         if dm_res.status_code == 200:
             dm_data = dm_res.json()
             if dm_data:
                 result["synonyms"] = [word["word"] for word in dm_data[:5]]
-                print(f"DEBUG dict: Synonyms found: {result['synonyms']}")
         
-        print(f"DEBUG dict: Fetching from Free Dictionary API...")
         fd_url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{clean_word}"
         fd_res = requests.get(fd_url, timeout=3)
-        print(f"DEBUG dict: Free Dictionary status={fd_res.status_code}")
         
         if fd_res.status_code == 200:
             fd_data = fd_res.json()[0]
@@ -144,7 +137,6 @@ def get_dictionary_info(word: str, lang: str):
                 if "definitions" in meaning and len(meaning["definitions"]) > 0:
                     result["definition"] = meaning["definitions"][0].get("definition", "")
         
-        print(f"DEBUG dict: Final result={result}")
         return result if result else None
         
     except Exception as e:
@@ -158,13 +150,20 @@ def get_wiki_trivia(lang_name: str):
         if res.status_code == 200:
             extract = res.json().get("extract", "")
             if extract:
+                # Divid textul în propoziții și aleg una random
+                sentences = re.split(r'[.!]+', extract)
+                sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
+                
+                if sentences:
+                    random_sentence = random.choice(sentences)
+                    return random_sentence + '.'
+                
                 return extract.split('.')[0] + '.'
     except Exception as e:
         print(f"DEBUG trivia: EROARE - {e}")
     return "Știai că există peste 7.000 de limbi vorbite în prezent? 🌍"
 
 # --- FUNCȚII PENTRU FAVORITE (PERSISTENȚĂ JSON) ---
-
 FAVORITES_FILE = os.path.join(base_dir, "favorites.json")
 
 def _ensure_favorites_file():

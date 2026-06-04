@@ -88,7 +88,8 @@ export default function ChatPage({ onBackToLanding }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [favorites, setFavorites] = useState([]);
   const [showCopyToast, setShowCopyToast] = useState(false);
-  const [activeTab, setActiveTab] = useState('activity'); 
+  const [activeTab, setActiveTab] = useState('activity');
+  const [originalDisplayText, setOriginalDisplayText] = useState(''); 
   
   const isTextMode = inputText.trim().length > 0
 
@@ -131,8 +132,18 @@ export default function ChatPage({ onBackToLanding }) {
         if (response.ok) {
           const data = await response.json()
           const extract = data.extract || ''
-          const scurt = extract.split('.')[0] + '.'
-          setDynamicFact(scurt)
+          
+          // Divid textul în propoziții (split pe . și !)
+          const sentences = extract.split(/[.!]+/).filter(s => s.trim().length > 10)
+          
+          // Aleg o propoziție random
+          if (sentences.length > 0) {
+            const randomIndex = Math.floor(Math.random() * sentences.length)
+            const scurt = sentences[randomIndex].trim() + '.'
+            setDynamicFact(scurt)
+          } else {
+            setDynamicFact('Știai că există peste 7.000 de limbi vorbite în prezent în întreaga lume? 🌍')
+          }
         } else {
           setDynamicFact('Știai că există peste 7.000 de limbi vorbite în prezent în întreaga lume? 🌍')
         }
@@ -169,6 +180,7 @@ export default function ChatPage({ onBackToLanding }) {
 
   const handleResponse = (data, input = "") => {
     setTranslatedText(data.translated_text);
+    setOriginalDisplayText(data.original_text || input);
     setBackendAudioUrl(data.audio_url);
     setDictionaryData(data.dictionary || null);
     setPhoneticText(data.phonetics || null);
@@ -440,118 +452,140 @@ export default function ChatPage({ onBackToLanding }) {
             <div className="w-full h-px my-1" style={{ background: `linear-gradient(90deg, transparent, ${theme.cardBorder}, transparent)` }}></div>
 
             {/* Text Tradus */}
-            <div className="w-full min-h-[140px] p-5 rounded-2xl mt-4 relative flex flex-col justify-between">
-              <p className="text-3xl font-bold leading-relaxed" style={{ color: theme.accent }}>
-                {appState === 'processing' ? <span className="opacity-50 text-xl">Backend-ul procesează...</span> : (translatedText || <span className="opacity-30 text-xl font-normal" style={{ color: theme.textMuted }}>Traducerea va apărea aici</span>)}
-              </p>
-
-              {/* Fonetică */}
-              {(phoneticText || (dictionaryData && dictionaryData.phonetic)) && (
-                <div className="mt-3 p-3 rounded-lg" style={{ background: isDark ? 'rgba(236, 72, 153, 0.08)' : 'rgba(236, 72, 153, 0.1)', border: `1px solid ${isDark ? 'rgba(236, 72, 153, 0.2)' : 'rgba(236, 72, 153, 0.3)'}` }}>
-                  <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-1" style={{ color: theme.accent }}>🔊 Pronunție Fonetică</p>
-                  <p className="text-sm font-mono" style={{ color: theme.accent }}>
-                    {phoneticText || dictionaryData?.phonetic}
+            <div className="w-full flex flex-col gap-6 mt-4">
+              {/* Textul Original */}
+              {translatedText && appState === 'idle' && (
+                <div className="p-5 rounded-2xl" style={{ background: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(248, 250, 252, 0.6)', border: `1px solid ${theme.cardBorder}` }}>
+                  <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-3" style={{ color: theme.textMuted }}>📝 Text Original</p>
+                  <p className="text-lg leading-relaxed" style={{ color: theme.textMain }}>
+                    {originalDisplayText}
                   </p>
                 </div>
               )}
 
-              {/* Dicționar */}
-              {dictionaryData && (
-                <div className="mt-4 p-4 rounded-xl" style={{ background: isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(248, 250, 252, 0.8)', border: `1px solid ${theme.cardBorder}` }}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-lg">📖</span>
-                    <h3 className="text-xs font-bold uppercase tracking-widest opacity-70">Dicționar{dictionaryData.partOfSpeech ? ` • ${dictionaryData.partOfSpeech}` : ''}</h3>
-                  </div>
-                  
-                  {dictionaryData.definition && (
-                    <div className="mb-3">
-                      <p className="text-[11px] font-bold uppercase tracking-widest opacity-50 mb-1" style={{ color: theme.textMuted }}>Definiție:</p>
-                      <p className="text-sm leading-relaxed" style={{ color: theme.textMain }}>
-                        {dictionaryData.definition}
-                      </p>
-                    </div>
-                  )}
-
-                  {dictionaryData.synonyms && dictionaryData.synonyms.length > 0 && (
-                    <div>
-                      <p className="text-[11px] font-bold uppercase tracking-widest opacity-50 mb-2" style={{ color: theme.textMuted }}>Sinonime:</p>
-                      <div className="flex gap-2 flex-wrap">
-                        {dictionaryData.synonyms.map((s, index) => (
-                          <span 
-                            key={index} 
-                            className="px-3 py-1.5 rounded-full text-xs font-medium transition-all hover:scale-105 cursor-default"
-                            style={{ 
-                              background: isDark ? 'rgba(236, 72, 153, 0.15)' : 'rgba(236, 72, 153, 0.1)',
-                              color: theme.accent,
-                              border: `1px solid ${isDark ? 'rgba(236, 72, 153, 0.3)' : 'rgba(236, 72, 153, 0.3)'}`
-                            }}
-                          >
-                            {s}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {(!dictionaryData.synonyms || dictionaryData.synonyms.length === 0) && !dictionaryData.definition && (
-                    <p className="text-xs italic opacity-50" style={{ color: theme.textMuted }}>
-                      Informații limitate disponibile pentru acest cuvânt.
-                    </p>
-                  )}
+              {/* Linie Separator */}
+              {translatedText && appState === 'idle' && (
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px" style={{ background: `linear-gradient(90deg, transparent, ${theme.cardBorder})` }}></div>
+                  <span className="text-xs uppercase font-bold opacity-50" style={{ color: theme.textMuted }}>⬇ Traducere</span>
+                  <div className="flex-1 h-px" style={{ background: `linear-gradient(90deg, ${theme.cardBorder}, transparent)` }}></div>
                 </div>
               )}
-              
-              {/* Toolbar Audio și Acțiuni */}
-              {translatedText && appState === 'idle' && (
-                <div className="flex justify-between items-center mt-4">
-                  <div className="flex items-center gap-3">
-                    {/* Buton Copy */}
-                    <div className="relative">
+
+              {/* Textul Tradus */}
+              <div className="p-5 rounded-2xl flex flex-col justify-between" style={{ background: isDark ? 'rgba(236, 72, 153, 0.08)' : 'rgba(236, 72, 153, 0.05)', border: `2px solid ${theme.accent}` }}>
+                <p className="text-3xl font-bold leading-relaxed" style={{ color: theme.accent }}>
+                  {appState === 'processing' ? <span className="opacity-50 text-xl">Backend-ul procesează...</span> : (translatedText || <span className="opacity-30 text-xl font-normal" style={{ color: theme.textMuted }}>Traducerea va apărea aici</span>)}
+                </p>
+
+                {/* Fonetică */}
+                {(phoneticText || (dictionaryData && dictionaryData.phonetic)) && (
+                  <div className="mt-3 p-3 rounded-lg" style={{ background: isDark ? 'rgba(236, 72, 153, 0.08)' : 'rgba(236, 72, 153, 0.1)', border: `1px solid ${isDark ? 'rgba(236, 72, 153, 0.2)' : 'rgba(236, 72, 153, 0.3)'}` }}>
+                    <p className="text-xs font-bold uppercase tracking-widest opacity-60 mb-1" style={{ color: theme.accent }}>🔊 Pronunție Fonetică</p>
+                    <p className="text-sm font-mono" style={{ color: theme.accent }}>
+                      {phoneticText || dictionaryData?.phonetic}
+                    </p>
+                  </div>
+                )}
+
+                {/* Dicționar */}
+                {dictionaryData && (
+                  <div className="mt-4 p-4 rounded-xl" style={{ background: isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(248, 250, 252, 0.8)', border: `1px solid ${theme.cardBorder}` }}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-lg">📖</span>
+                      <h3 className="text-xs font-bold uppercase tracking-widest opacity-70">Dicționar{dictionaryData.partOfSpeech ? ` • ${dictionaryData.partOfSpeech}` : ''}</h3>
+                    </div>
+                    
+                    {dictionaryData.definition && (
+                      <div className="mb-3">
+                        <p className="text-[11px] font-bold uppercase tracking-widest opacity-50 mb-1" style={{ color: theme.textMuted }}>Definiție:</p>
+                        <p className="text-sm leading-relaxed" style={{ color: theme.textMain }}>
+                          {dictionaryData.definition}
+                        </p>
+                      </div>
+                    )}
+
+                    {dictionaryData.synonyms && dictionaryData.synonyms.length > 0 && (
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-widest opacity-50 mb-2" style={{ color: theme.textMuted }}>Sinonime:</p>
+                        <div className="flex gap-2 flex-wrap">
+                          {dictionaryData.synonyms.map((s, index) => (
+                            <span 
+                              key={index} 
+                              className="px-3 py-1.5 rounded-full text-xs font-medium transition-all hover:scale-105 cursor-default"
+                              style={{ 
+                                background: isDark ? 'rgba(236, 72, 153, 0.15)' : 'rgba(236, 72, 153, 0.1)',
+                                color: theme.accent,
+                                border: `1px solid ${isDark ? 'rgba(236, 72, 153, 0.3)' : 'rgba(236, 72, 153, 0.3)'}`
+                              }}
+                            >
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {(!dictionaryData.synonyms || dictionaryData.synonyms.length === 0) && !dictionaryData.definition && (
+                      <p className="text-xs italic opacity-50" style={{ color: theme.textMuted }}>
+                        Informații limitate disponibile pentru acest cuvânt.
+                      </p>
+                    )}
+                  </div>
+                )}
+                
+                {/* Toolbar Audio și Acțiuni */}
+                {translatedText && appState === 'idle' && (
+                  <div className="flex justify-between items-center mt-4">
+                    <div className="flex items-center gap-3">
+                      {/* Buton Copy */}
+                      <div className="relative">
+                        <button 
+                          onClick={handleCopy} 
+                          className="p-2 hover:opacity-70 transition-all relative" 
+                          title="Copiază textul tradus"
+                          style={{ color: theme.textMuted }}
+                        >
+                          {showCopyToast ? (
+                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"></path></svg>
+                          ) : (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                          )}
+                        </button>
+                        {showCopyToast && (
+                          <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 px-2 py-1 bg-black text-white text-xs rounded whitespace-nowrap">
+                            Copiat!
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Buton Favorite */}
                       <button 
-                        onClick={handleCopy} 
-                        className="p-2 hover:opacity-70 transition-all relative" 
-                        title="Copiază textul tradus"
-                        style={{ color: theme.textMuted }}
+                        onClick={handleAddFavorite} 
+                        className="p-2 hover:opacity-70 transition-all" 
+                        title="Adaugă în favorite"
+                        style={{ color: favorites.some(f => f.translated === translatedText) ? '#ec4899' : theme.textMuted }}
                       >
-                        {showCopyToast ? (
-                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"></path></svg>
+                        {favorites.some(f => f.translated === translatedText) ? (
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
                         ) : (
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
                         )}
                       </button>
-                      {showCopyToast && (
-                        <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 px-2 py-1 bg-black text-white text-xs rounded whitespace-nowrap">
-                          Copiat!
-                        </span>
-                      )}
                     </div>
 
-                    {/* Buton Favorite */}
-                    <button 
-                      onClick={handleAddFavorite} 
-                      className="p-2 hover:opacity-70 transition-all" 
-                      title="Adaugă în favorite"
-                      style={{ color: favorites.some(f => f.translated === translatedText) ? '#ec4899' : theme.textMuted }}
-                    >
-                      {favorites.some(f => f.translated === translatedText) ? (
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-                      ) : (
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-                      )}
-                    </button>
+                    {/* Toolbar Audio */}
+                    {backendAudioUrl && (
+                      <div className="flex items-center gap-1 bg-black/5 rounded-full pr-2 p-1" style={{ border: `1px solid ${theme.cardBorder}`}}>
+                        <button onClick={handleManualSpeak} className="p-1 hover:text-pink-500 transition-colors" title="Ascultă din Backend (Azure)">
+                          <svg className="w-5 h-5" fill="none" stroke={theme.accent} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
+                        </button>
+                        <button onClick={() => setPlaybackSpeed(s => s === 1 ? 0.5 : s === 0.5 ? 1.5 : 1)} className="text-xs font-bold transition-colors w-7 text-center" style={{ color: theme.textMuted }}>{playbackSpeed}x</button>
+                      </div>
+                    )}
                   </div>
-
-                  {/* Toolbar Audio */}
-                  {backendAudioUrl && (
-                    <div className="flex items-center gap-1 bg-black/5 rounded-full pr-2 p-1" style={{ border: `1px solid ${theme.cardBorder}`}}>
-                      <button onClick={handleManualSpeak} className="p-1 hover:text-pink-500 transition-colors" title="Ascultă din Backend (Azure)">
-                        <svg className="w-5 h-5" fill="none" stroke={theme.accent} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
-                      </button>
-                      <button onClick={() => setPlaybackSpeed(s => s === 1 ? 0.5 : s === 0.5 ? 1.5 : 1)} className="text-xs font-bold transition-colors w-7 text-center" style={{ color: theme.textMuted }}>{playbackSpeed}x</button>
-                    </div>
-                  )}
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
             {/* Buton Trimitere Principal */}
