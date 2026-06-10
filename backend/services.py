@@ -25,8 +25,9 @@ def transcribe_audio(audio_path: str, source_lang: str = None):
     wav_path = audio_path + "_fix.wav"
     azure_locales = {
         "ro": "ro-RO", "en": "en-US", "fr": "fr-FR", "de": "de-DE",
-        "es": "es-ES", "it": "it-IT", "ja": "ja-JP", "zh": "zh-CN",
-        "ar": "ar-SA", "ru": "ru-RU"
+        "es": "es-ES", "it": "it-IT", "pt": "pt-PT", "ja": "ja-JP",
+        "ko": "ko-KR", "zh": "zh-CN", "ar": "ar-SA", "hi": "hi-IN",
+        "tr": "tr-TR", "ru": "ru-RU", "uk": "uk-UA", "el": "el-GR"
     }
     
     try:
@@ -77,9 +78,11 @@ def generate_tts(text: str, lang_code: str):
     if not text: return None
     voices = {
         "ro": "ro-RO-AlinaNeural", "en": "en-US-JennyNeural", "it": "it-IT-ElsaNeural",       
-        "fr": "fr-FR-DeniseNeural", "de": "de-DE-KatjaNeural", "es": "es-ES-ElviraNeural",     
-        "ja": "ja-JP-NanamiNeural", "zh": "zh-CN-XiaoxiaoNeural", "ar": "ar-SA-ZariyahNeural",    
-        "ru": "ru-RU-SvetlanaNeural"      
+        "fr": "fr-FR-DeniseNeural", "de": "de-DE-KatjaNeural", "es": "es-ES-ElviraNeural",
+        "pt": "pt-PT-RaquelNeural", "ja": "ja-JP-NanamiNeural", "ko": "ko-KR-SunHiNeural",
+        "zh": "zh-CN-XiaoxiaoNeural", "ar": "ar-SA-ZariyahNeural", "hi": "hi-IN-SwaraNeural",
+        "tr": "tr-TR-EmelNeural", "ru": "ru-RU-SvetlanaNeural", "uk": "uk-UA-PolinaNeural",
+        "el": "el-GR-AthinaNeural"
     }
     prefix = lang_code.split('-')[0]
     voice_name = voices.get(prefix, "en-US-JennyNeural")

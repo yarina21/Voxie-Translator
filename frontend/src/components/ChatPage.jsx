@@ -97,14 +97,23 @@ export default function ChatPage({ onBackToLanding }) {
     { code: 'auto', name: 'Auto-Detectare' },
     { code: 'ro', name: 'Română' }, { code: 'en', name: 'Engleză' },
     { code: 'fr', name: 'Franceză' }, { code: 'de', name: 'Germană' },
-    { code: 'es', name: 'Spaniolă' }, { code: 'it', name: 'Italiană' }
+    { code: 'es', name: 'Spaniolă' }, { code: 'it', name: 'Italiană' },
+    { code: 'pt', name: 'Portugheză' }, { code: 'ja', name: 'Japoneză' },
+    { code: 'ko', name: 'Coreeană' }, { code: 'zh', name: 'Chineză' },
+    { code: 'ar', name: 'Arabă' }, { code: 'hi', name: 'Hindi' },
+    { code: 'tr', name: 'Turcă' }, { code: 'ru', name: 'Rusă' },
+    { code: 'uk', name: 'Ucraineană' }, { code: 'el', name: 'Greacă' }
   ]
   
   const targetLanguages = [
     { code: 'en', name: 'Engleză' }, { code: 'ro', name: 'Română' },
     { code: 'fr', name: 'Franceză' }, { code: 'de', name: 'Germană' },
     { code: 'es', name: 'Spaniolă' }, { code: 'it', name: 'Italiană' },
-    { code: 'ja', name: 'Japoneză' }, { code: 'zh', name: 'Chineză' }
+    { code: 'pt', name: 'Portugheză' }, { code: 'ja', name: 'Japoneză' },
+    { code: 'ko', name: 'Coreeană' }, { code: 'zh', name: 'Chineză' },
+    { code: 'ar', name: 'Arabă' }, { code: 'hi', name: 'Hindi' },
+    { code: 'tr', name: 'Turcă' }, { code: 'ru', name: 'Rusă' },
+    { code: 'uk', name: 'Ucraineană' }, { code: 'el', name: 'Greacă' }
   ]
 
   useEffect(() => {
